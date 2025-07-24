@@ -23,12 +23,15 @@ final class myBiographyUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testRecordButtonToggle() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        let startButton = app.buttons["Start Recording"]
+        XCTAssertTrue(startButton.exists)
+        startButton.tap()
+        let stopButton = app.buttons["Stop Recording"]
+        XCTAssertTrue(stopButton.waitForExistence(timeout: 1))
     }
 
     @MainActor
