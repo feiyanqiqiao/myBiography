@@ -13,6 +13,13 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            Picker("Language", selection: $speechRecognizer.currentLocale) {
+                ForEach(speechRecognizer.supportedLocales, id: \.self) { locale in
+                    Text(locale.identifier).tag(locale)
+                }
+            }
+            .pickerStyle(.segmented)
+
             Text(speechRecognizer.recognizedText)
                 .padding()
                 .frame(maxHeight: 200)
