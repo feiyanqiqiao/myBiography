@@ -18,9 +18,15 @@ enum SpeechRecognizerError: Error {
 class SpeechRecognizer: ObservableObject {
     @Published var recognizedText: String = ""
     private let audioEngine = AVAudioEngine()
-    private var request: SFSpeechAudioBufferRecognitionRequest?
-    private var task: SFSpeechRecognitionTask?
-    private let recognizer = SFSpeechRecognizer()
+    private var requests: [SFSpeechAudioBufferRecognitionRequest] = []
+    private var tasks: [SFSpeechRecognitionTask] = []
+    private var recognizers: [SFSpeechRecognizer] = []
+    private let supportedLocales: [Locale] = [
+        Locale(identifier: "en-US"),
+        Locale(identifier: "zh-CN"),
+        Locale(identifier: "ja-JP")
+    ]
+    private var bestResult: (text: String, confidence: Float) = ("", 0)
 
     init() {
         requestAuthorization()
@@ -42,29 +48,26 @@ class SpeechRecognizer: ObservableObject {
     }
 
     func startRecording() throws {
-        guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
+        recognizers = supportedLocales.compactMap { SFSpeechRecognizer(locale: $0) }
+        guard !recognizers.isEmpty, recognizers.allSatisfy({ $0.isAvailable }) else {
             throw SpeechRecognizerError.authorizationDenied
         }
 
-        request = SFSpeechAudioBufferRecognitionRequest()
+        requests = recognizers.map { _ in SFSpeechAudioBufferRecognitionRequest() }
+        requests.forEach { $0.shouldReportPartialResults = true }
         let inputNode = audioEngine.inputNode
-        guard let request = request else { throw SpeechRecognizerError.audioEngineError }
-        request.shouldReportPartialResults = true
 
-        task = recognizer.recognitionTask(with: request) { result, error in
-            if let result = result {
-                DispatchQueue.main.async {
-                    self.recognizedText = result.bestTranscription.formattedString
-                }
-            }
-            if error != nil || (result?.isFinal ?? false) {
-                self.stopRecording()
+        tasks = zip(recognizers, requests).map { recognizer, request in
+            recognizer.recognitionTask(with: request) { result, error in
+                self.handleResult(result: result, error: error)
             }
         }
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            request.append(buffer)
+            for request in self.requests {
+                request.append(buffer)
+            }
         }
 
         audioEngine.prepare()
@@ -74,12 +77,35 @@ class SpeechRecognizer: ObservableObject {
         }
     }
 
+    private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
+        if let result = result {
+            let confidence = averageConfidence(result.bestTranscription)
+            if confidence > bestResult.confidence {
+                bestResult = (result.bestTranscription.formattedString, confidence)
+                DispatchQueue.main.async {
+                    self.recognizedText = self.bestResult.text
+                }
+            }
+        }
+        if error != nil || (result?.isFinal ?? false) {
+            self.stopRecording()
+        }
+    }
+
+    private func averageConfidence(_ transcription: SFTranscription) -> Float {
+        guard !transcription.segments.isEmpty else { return 0 }
+        let total = transcription.segments.reduce(0) { $0 + $1.confidence }
+        return total / Float(transcription.segments.count)
+    }
+
     func stopRecording() {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        request?.endAudio()
-        task?.cancel()
-        request = nil
-        task = nil
+        for request in requests { request.endAudio() }
+        for task in tasks { task.cancel() }
+        requests.removeAll()
+        tasks.removeAll()
+        recognizers.removeAll()
+        bestResult = ("", 0)
     }
 }
