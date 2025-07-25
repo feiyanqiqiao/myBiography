@@ -17,15 +17,20 @@ enum SpeechRecognizerError: Error {
 
 class SpeechRecognizer: ObservableObject {
     @Published var recognizedText: String = ""
-    private let audioEngine = AVAudioEngine()
-    private var requests: [SFSpeechAudioBufferRecognitionRequest] = []
-    private var tasks: [SFSpeechRecognitionTask] = []
-    private var recognizers: [SFSpeechRecognizer] = []
-    private let supportedLocales: [Locale] = [
+    /// Locale selected for recognition
+    @Published var currentLocale: Locale = Locale(identifier: "en-US")
+
+    /// Locales presented to the user
+    let supportedLocales: [Locale] = [
         Locale(identifier: "en-US"),
         Locale(identifier: "zh-CN"),
         Locale(identifier: "ja-JP")
     ]
+
+    private let audioEngine = AVAudioEngine()
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var speechRecognizer: SFSpeechRecognizer?
     private var bestResult: (text: String, confidence: Float) = ("", 0)
 
     init() {
@@ -48,30 +53,27 @@ class SpeechRecognizer: ObservableObject {
     }
 
     func startRecording() throws {
-        recognizers = supportedLocales.compactMap { SFSpeechRecognizer(locale: $0) }
-        guard !recognizers.isEmpty, recognizers.allSatisfy({ $0.isAvailable }) else {
+        guard let recognizer = SFSpeechRecognizer(locale: currentLocale), recognizer.isAvailable else {
             throw SpeechRecognizerError.authorizationDenied
         }
 
-        requests = recognizers.map { _ in SFSpeechAudioBufferRecognitionRequest() }
-        requests.forEach { $0.shouldReportPartialResults = true }
+        speechRecognizer = recognizer
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        recognitionRequest?.shouldReportPartialResults = true
+
         let inputNode = audioEngine.inputNode
-
-        tasks = zip(recognizers, requests).map { recognizer, request in
-            recognizer.recognitionTask(with: request) { result, error in
-                self.handleResult(result: result, error: error)
-            }
-        }
-
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            for request in self.requests {
-                request.append(buffer)
-            }
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
         }
 
         audioEngine.prepare()
         try audioEngine.start()
+
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest!) { [weak self] result, error in
+            self?.handleResult(result: result, error: error)
+        }
+
         DispatchQueue.main.async {
             self.recognizedText = "(Listening...)"
         }
@@ -101,11 +103,13 @@ class SpeechRecognizer: ObservableObject {
     func stopRecording() {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        for request in requests { request.endAudio() }
-        for task in tasks { task.cancel() }
-        requests.removeAll()
-        tasks.removeAll()
-        recognizers.removeAll()
+
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+
+        recognitionRequest = nil
+        recognitionTask = nil
+        speechRecognizer = nil
         bestResult = ("", 0)
     }
 }
