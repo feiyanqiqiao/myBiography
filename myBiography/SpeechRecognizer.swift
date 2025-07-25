@@ -31,7 +31,6 @@ class SpeechRecognizer: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
-    private var bestResult: (text: String, confidence: Float) = ("", 0)
 
     init() {
         requestAuthorization()
@@ -81,23 +80,13 @@ class SpeechRecognizer: ObservableObject {
 
     private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result = result {
-            let confidence = averageConfidence(result.bestTranscription)
-            if confidence > bestResult.confidence {
-                bestResult = (result.bestTranscription.formattedString, confidence)
-                DispatchQueue.main.async {
-                    self.recognizedText = self.bestResult.text
-                }
+            DispatchQueue.main.async {
+                self.recognizedText = result.bestTranscription.formattedString
             }
         }
-        if error != nil || (result?.isFinal ?? false) {
+        if error != nil {
             self.stopRecording()
         }
-    }
-
-    private func averageConfidence(_ transcription: SFTranscription) -> Float {
-        guard !transcription.segments.isEmpty else { return 0 }
-        let total = transcription.segments.reduce(0) { $0 + $1.confidence }
-        return total / Float(transcription.segments.count)
     }
 
     func stopRecording() {
@@ -110,6 +99,5 @@ class SpeechRecognizer: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
         speechRecognizer = nil
-        bestResult = ("", 0)
     }
 }
