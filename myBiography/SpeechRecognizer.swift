@@ -43,9 +43,9 @@ class SpeechRecognizer: ObservableObject {
                 case .authorized:
                     break
                 case .denied, .restricted, .notDetermined:
-                    self.recognizedText = "Speech recognition authorization denied."
+                    self.recognizedText = Localization.text(for: "speech_authorization_denied", locale: self.currentLocale)
                 @unknown default:
-                    self.recognizedText = "Speech recognition not available."
+                    self.recognizedText = Localization.text(for: "speech_not_available", locale: self.currentLocale)
                 }
             }
         }
@@ -74,7 +74,7 @@ class SpeechRecognizer: ObservableObject {
         }
 
         DispatchQueue.main.async {
-            self.recognizedText = "(Listening...)"
+            self.recognizedText = Localization.text(for: "listening", locale: self.currentLocale)
         }
     }
 
