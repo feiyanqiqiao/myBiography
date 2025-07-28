@@ -11,11 +11,24 @@ struct ContentView: View {
     @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var isRecording = false
 
+    private func languageName(for locale: Locale) -> String {
+        switch locale.identifier {
+        case "en-US":
+            return "en-US"
+        case "zh-CN":
+            return "中文"
+        case "ja-JP":
+            return "日本語"
+        default:
+            return locale.identifier
+        }
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             Picker(Localization.text(for: "language", locale: speechRecognizer.currentLocale), selection: $speechRecognizer.currentLocale) {
                 ForEach(speechRecognizer.supportedLocales, id: \.self) { locale in
-                    Text(locale.identifier).tag(locale)
+                    Text(languageName(for: locale)).tag(locale)
                 }
             }
             .pickerStyle(.segmented)
