@@ -13,7 +13,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Picker("Language", selection: $speechRecognizer.currentLocale) {
+            Picker(Localization.text(for: "language", locale: speechRecognizer.currentLocale), selection: $speechRecognizer.currentLocale) {
                 ForEach(speechRecognizer.supportedLocales, id: \.self) { locale in
                     Text(locale.identifier).tag(locale)
                 }
@@ -26,7 +26,7 @@ struct ContentView: View {
                 .border(Color.gray)
 
             Button(action: toggleRecording) {
-                Text(isRecording ? "Stop Recording" : "Start Recording")
+                Text(isRecording ? Localization.text(for: "stop_recording", locale: speechRecognizer.currentLocale) : Localization.text(for: "start_recording", locale: speechRecognizer.currentLocale))
                     .padding()
                     .foregroundColor(.white)
                     .background(isRecording ? Color.red : Color.blue)
@@ -45,7 +45,7 @@ struct ContentView: View {
                 try speechRecognizer.startRecording()
                 isRecording = true
             } catch {
-                speechRecognizer.recognizedText = "Recording unavailable."
+                speechRecognizer.recognizedText = Localization.text(for: "recording_unavailable", locale: speechRecognizer.currentLocale)
             }
         }
     }
