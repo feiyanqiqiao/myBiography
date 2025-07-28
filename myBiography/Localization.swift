@@ -32,7 +32,7 @@ struct Localization {
     ]
 
     static func text(for key: String, locale: Locale) -> String {
-        let lang = locale.languageCode ?? "en"
+        let lang = locale.language.languageCode?.identifier ?? "en"
         if let value = translations[lang]?[key] {
             return value
         }
