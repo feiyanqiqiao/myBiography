@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Speech
+import NaturalLanguage
 
 // ViewModel handling speech recognition
 enum SpeechRecognizerError: Error {
@@ -81,7 +82,10 @@ class SpeechRecognizer: ObservableObject {
     private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result = result {
             DispatchQueue.main.async {
-                self.recognizedText = result.bestTranscription.formattedString
+                let text = result.bestTranscription.formattedString
+                let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
+                let language = NLLanguage(rawValue: langCode)
+                self.recognizedText = TextProcessor.punctuate(text, language: language)
             }
         }
         if error != nil {
