@@ -91,24 +91,8 @@ class SpeechRecognizer: ObservableObject {
                 let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
                 let language = NLLanguage(rawValue: langCode)
 
-                // Determine newly appended portion of the transcript.
-                let newSegment: String
-                if text.hasPrefix(self.lastTranscript) {
-                    newSegment = String(text.dropFirst(self.lastTranscript.count))
-                } else {
-                    // If the recognizer revised earlier text, repunctuate everything.
-                    self.lastTranscript = text
-                    self.recognizedText = TextProcessor.punctuate(text, language: language)
-                    return
-                }
-
                 self.lastTranscript = text
-                let punctuated = TextProcessor.punctuate(newSegment, language: language)
-                if self.recognizedText.isEmpty {
-                    self.recognizedText = punctuated
-                } else if !punctuated.isEmpty {
-                    self.recognizedText += " " + punctuated
-                }
+                self.recognizedText = TextProcessor.punctuate(text, language: language)
             }
         }
         if error != nil {
