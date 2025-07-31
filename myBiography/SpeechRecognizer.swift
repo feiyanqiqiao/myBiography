@@ -34,6 +34,12 @@ class SpeechRecognizer: ObservableObject {
     private var speechRecognizer: SFSpeechRecognizer?
     /// Last raw transcript received from the recognizer
     private var lastTranscript: String = ""
+    /// Index of the last processed segment
+    private var lastSegmentIndex: Int = 0
+    /// Finalized text with punctuation
+    private var finalizedText: String = ""
+    /// Current sentence being recognized
+    private var currentSentence: String = ""
 
     init() {
         requestAuthorization()
@@ -65,6 +71,9 @@ class SpeechRecognizer: ObservableObject {
 
         // Reset transcript state at the start of a new recording session
         lastTranscript = ""
+        lastSegmentIndex = 0
+        finalizedText = ""
+        currentSentence = ""
 
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
@@ -87,12 +96,29 @@ class SpeechRecognizer: ObservableObject {
     private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result = result {
             DispatchQueue.main.async {
-                let text = result.bestTranscription.formattedString
-                let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
-                let language = NLLanguage(rawValue: langCode)
+                let segments = result.bestTranscription.segments
+                if segments.count > self.lastSegmentIndex {
+                    for i in self.lastSegmentIndex..<segments.count {
+                        let seg = segments[i]
+                        self.currentSentence += seg.substring
+                        if i < segments.count - 1 {
+                            self.currentSentence += " "
+                        }
+                    }
+                    self.lastSegmentIndex = segments.count
+                }
 
-                self.lastTranscript = text
-                self.recognizedText = TextProcessor.punctuate(text, language: language)
+                if result.isFinal {
+                    let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
+                    let language = NLLanguage(rawValue: langCode)
+                    let punctuated = TextProcessor.punctuate(self.currentSentence, language: language)
+                    self.finalizedText += punctuated + "\n"
+                    self.currentSentence = ""
+                    self.lastSegmentIndex = 0
+                }
+
+                self.recognizedText = self.finalizedText + self.currentSentence
+                self.lastTranscript = result.bestTranscription.formattedString
             }
         }
         if error != nil {
@@ -106,6 +132,15 @@ class SpeechRecognizer: ObservableObject {
 
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
+
+        if !currentSentence.isEmpty {
+            let langCode = currentLocale.language.languageCode?.identifier ?? "en"
+            let language = NLLanguage(rawValue: langCode)
+            let punctuated = TextProcessor.punctuate(currentSentence, language: language)
+            finalizedText += punctuated + "\n"
+            currentSentence = ""
+        }
+        recognizedText = finalizedText
 
         recognitionRequest = nil
         recognitionTask = nil
