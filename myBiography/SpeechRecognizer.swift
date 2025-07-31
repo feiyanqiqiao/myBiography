@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Speech
-import NaturalLanguage
 
 // ViewModel handling speech recognition
 enum SpeechRecognizerError: Error {
@@ -32,14 +31,8 @@ class SpeechRecognizer: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
-    /// Last raw transcript received from the recognizer
-    private var lastTranscript: String = ""
-    /// Index of the last processed segment
-    private var lastSegmentIndex: Int = 0
-    /// Finalized text with punctuation
-    private var finalizedText: String = ""
-    /// Current sentence being recognized
-    private var currentSentence: String = ""
+    /// Last formatted transcript we processed
+    private var lastFormatted: String = ""
 
     init() {
         requestAuthorization()
@@ -70,11 +63,8 @@ class SpeechRecognizer: ObservableObject {
         recognitionRequest?.shouldReportPartialResults = true
 
         // Reset transcript state at the start of a new recording session
-        lastTranscript = ""
-        lastSegmentIndex = 0
-        finalizedText = ""
-        currentSentence = ""
-
+        lastFormatted = ""
+        
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -96,29 +86,29 @@ class SpeechRecognizer: ObservableObject {
     private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result = result {
             DispatchQueue.main.async {
-                let segments = result.bestTranscription.segments
-                if segments.count > self.lastSegmentIndex {
-                    for i in self.lastSegmentIndex..<segments.count {
-                        let seg = segments[i]
-                        self.currentSentence += seg.substring
-                        if i < segments.count - 1 {
-                            self.currentSentence += " "
-                        }
+                let formatted = result.bestTranscription.formattedString
+                var update = formatted
+                if formatted.hasPrefix(self.lastFormatted) {
+                    update = String(formatted.dropFirst(self.lastFormatted.count))
+                } else {
+                    self.recognizedText = formatted
+                    self.lastFormatted = formatted
+                    if result.isFinal {
+                        self.recognizedText += "\n"
                     }
-                    self.lastSegmentIndex = segments.count
+                    return
                 }
+
+                if self.recognizedText.hasSuffix("\n") && update.hasPrefix(" ") {
+                    update.removeFirst()
+                }
+
+                self.recognizedText += update
+                self.lastFormatted = formatted
 
                 if result.isFinal {
-                    let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
-                    let language = NLLanguage(rawValue: langCode)
-                    let punctuated = TextProcessor.punctuate(self.currentSentence, language: language)
-                    self.finalizedText += punctuated + "\n"
-                    self.currentSentence = ""
-                    self.lastSegmentIndex = 0
+                    self.recognizedText += "\n"
                 }
-
-                self.recognizedText = self.finalizedText + self.currentSentence
-                self.lastTranscript = result.bestTranscription.formattedString
             }
         }
         if error != nil {
@@ -133,17 +123,11 @@ class SpeechRecognizer: ObservableObject {
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
 
-        if !currentSentence.isEmpty {
-            let langCode = currentLocale.language.languageCode?.identifier ?? "en"
-            let language = NLLanguage(rawValue: langCode)
-            let punctuated = TextProcessor.punctuate(currentSentence, language: language)
-            finalizedText += punctuated + "\n"
-            currentSentence = ""
-        }
-        recognizedText = finalizedText
-
         recognitionRequest = nil
         recognitionTask = nil
         speechRecognizer = nil
+
+        // Leave any partial text as-is in recognizedText
+
     }
 }
