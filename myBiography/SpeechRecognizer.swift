@@ -31,6 +31,10 @@ class SpeechRecognizer: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
+    /// Holds the text returned when the last final result was received
+    private var lastFinalTranscript: String = ""
+    /// Text with punctuation appended for completed utterances
+    private var completedText: String = ""
 
     init() {
         requestAuthorization()
@@ -79,13 +83,49 @@ class SpeechRecognizer: ObservableObject {
     }
 
     private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
-        if let result = result {
+        guard let result = result else {
+            if error != nil {
+                self.stopRecording()
+            }
+            return
+        }
+
+        let transcription = result.bestTranscription.formattedString
+        if result.isFinal {
+            var newSegment = transcription
+            if newSegment.hasPrefix(lastFinalTranscript) {
+                newSegment.removeFirst(lastFinalTranscript.count)
+            }
+            newSegment = newSegment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !newSegment.isEmpty {
+                completedText += newSegment + punctuationForCurrentLocale()
+            }
+            lastFinalTranscript = transcription
             DispatchQueue.main.async {
-                self.recognizedText = result.bestTranscription.formattedString
+                self.recognizedText = self.completedText
+            }
+        } else {
+            var partial = transcription
+            if partial.hasPrefix(lastFinalTranscript) {
+                partial.removeFirst(lastFinalTranscript.count)
+            }
+            DispatchQueue.main.async {
+                self.recognizedText = self.completedText + partial
             }
         }
+
         if error != nil {
             self.stopRecording()
+        }
+    }
+
+    private func punctuationForCurrentLocale() -> String {
+        let lang = currentLocale.language.languageCode?.identifier ?? "en"
+        switch lang {
+        case "zh", "ja":
+            return "。"
+        default:
+            return ". "
         }
     }
 
