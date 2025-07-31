@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Speech
-import NaturalLanguage
 
 // ViewModel handling speech recognition
 enum SpeechRecognizerError: Error {
@@ -32,8 +31,8 @@ class SpeechRecognizer: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
-    /// Last raw transcript received from the recognizer
-    private var lastTranscript: String = ""
+    /// Last formatted transcript we processed
+    private var lastFormatted: String = ""
 
     init() {
         requestAuthorization()
@@ -64,8 +63,8 @@ class SpeechRecognizer: ObservableObject {
         recognitionRequest?.shouldReportPartialResults = true
 
         // Reset transcript state at the start of a new recording session
-        lastTranscript = ""
-
+        lastFormatted = ""
+        
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -87,12 +86,29 @@ class SpeechRecognizer: ObservableObject {
     private func handleResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result = result {
             DispatchQueue.main.async {
-                let text = result.bestTranscription.formattedString
-                let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
-                let language = NLLanguage(rawValue: langCode)
+                let formatted = result.bestTranscription.formattedString
+                var update = formatted
+                if formatted.hasPrefix(self.lastFormatted) {
+                    update = String(formatted.dropFirst(self.lastFormatted.count))
+                } else {
+                    self.recognizedText = formatted
+                    self.lastFormatted = formatted
+                    if result.isFinal {
+                        self.recognizedText += "\n"
+                    }
+                    return
+                }
 
-                self.lastTranscript = text
-                self.recognizedText = TextProcessor.punctuate(text, language: language)
+                if self.recognizedText.hasSuffix("\n") && update.hasPrefix(" ") {
+                    update.removeFirst()
+                }
+
+                self.recognizedText += update
+                self.lastFormatted = formatted
+
+                if result.isFinal {
+                    self.recognizedText += "\n"
+                }
             }
         }
         if error != nil {
@@ -110,5 +126,8 @@ class SpeechRecognizer: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
         speechRecognizer = nil
+
+        // Leave any partial text as-is in recognizedText
+
     }
 }
