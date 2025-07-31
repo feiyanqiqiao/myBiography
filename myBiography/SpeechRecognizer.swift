@@ -32,8 +32,6 @@ class SpeechRecognizer: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
-    /// Last raw transcript received from the recognizer
-    private var lastTranscript: String = ""
 
     init() {
         requestAuthorization()
@@ -63,9 +61,6 @@ class SpeechRecognizer: ObservableObject {
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         recognitionRequest?.shouldReportPartialResults = true
 
-        // Reset transcript state at the start of a new recording session
-        lastTranscript = ""
-
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -90,25 +85,7 @@ class SpeechRecognizer: ObservableObject {
                 let text = result.bestTranscription.formattedString
                 let langCode = self.currentLocale.language.languageCode?.identifier ?? "en"
                 let language = NLLanguage(rawValue: langCode)
-
-                // Determine newly appended portion of the transcript.
-                let newSegment: String
-                if text.hasPrefix(self.lastTranscript) {
-                    newSegment = String(text.dropFirst(self.lastTranscript.count))
-                } else {
-                    // If the recognizer revised earlier text, repunctuate everything.
-                    self.lastTranscript = text
-                    self.recognizedText = TextProcessor.punctuate(text, language: language)
-                    return
-                }
-
-                self.lastTranscript = text
-                let punctuated = TextProcessor.punctuate(newSegment, language: language)
-                if self.recognizedText.isEmpty {
-                    self.recognizedText = punctuated
-                } else if !punctuated.isEmpty {
-                    self.recognizedText += " " + punctuated
-                }
+                self.recognizedText = TextProcessor.punctuate(text, language: language)
             }
         }
         if error != nil {
