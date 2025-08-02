@@ -33,7 +33,7 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
 
-            Text(speechRecognizer.recognizedText)
+            Text(speechRecognizer.displayText)
                 .padding()
                 .frame(maxHeight: 200)
                 .border(Color.gray)
@@ -58,7 +58,7 @@ struct ContentView: View {
                 try speechRecognizer.startRecording()
                 isRecording = true
             } catch {
-                speechRecognizer.recognizedText = Localization.text(for: "recording_unavailable", locale: speechRecognizer.currentLocale)
+                speechRecognizer.displayText = Localization.text(for: "recording_unavailable", locale: speechRecognizer.currentLocale)
             }
         }
     }
